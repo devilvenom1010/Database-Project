@@ -1,4 +1,4 @@
-﻿CREATE PROCEDURE [dbo].[USP_DP_DeploymentTestProcedure]
+﻿CREATE PROCEDURE [dbo].[USP_CBS_DeploymentTestProcedure]
 AS
 BEGIN
 	SELECT 'THis is for Testing Purpose only'
