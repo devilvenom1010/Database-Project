@@ -1,0 +1,30 @@
+--=============================================
+-- Update a validation message
+-- =============================================
+CREATE  PROCEDURE USP_CBS_Update_AppSysMsgMain
+@MSG_CODE VARCHAR(50),
+@NEW_MSG_TEMPLATE NVARCHAR(1000),
+@MODIFIED_BY VARCHAR(50),
+@CHANGE_REASON NVARCHAR(500)
+AS
+BEGIN
+    DECLARE @OLD_MSG_TEMPLATE NVARCHAR(1000);
+    
+    -- Get old message
+    SELECT @OLD_MSG_TEMPLATE = MSG_TEMPLATE
+    FROM APP_SYS_MSG_MAIN
+    WHERE MSG_CODE = @MSG_CODE;
+    
+    -- Update message
+    UPDATE APP_SYS_MSG_MAIN
+    SET MSG_TEMPLATE = @NEW_MSG_TEMPLATE,
+        MODIFIED_USER_ID = @MODIFIED_BY,
+        MODIFIED_DATE = GETDATE()
+    WHERE MSG_CODE = @MSG_CODE;
+    
+    -- Log history
+    INSERT INTO APP_SYS_MSG_HIST 
+        (MSG_CODE, OLD_MSG_TEMPLATE, NEW_MSG_TEMPLATE, CHANGED_BY, CHANGE_REASON)
+    VALUES 
+        (@MSG_CODE, @OLD_MSG_TEMPLATE, @NEW_MSG_TEMPLATE, @MODIFIED_BY, @CHANGE_REASON);
+END;
