@@ -31,7 +31,7 @@ jobs:
       - name: Find dacpac
         shell: pwsh
         run: |
-          Get-ChildItem -Recurse -Filter "*.dacpac" | Select-Object FullName
+          Get-ChildItem -Recurse -Filter "*.dacpac" | ForEach-Object { Write-Host $_.FullName }
 
       - name: Deploy to All Clients
         shell: pwsh
