@@ -61,6 +61,7 @@ $results = $clients | ForEach-Object -Parallel {
     "/TargetDatabaseName:$($client.DatabaseName)" `
     "/TargetUser:$user" `
     "/TargetPassword:$pass" `
+    "/TargetTrustServerCertificate:True" `
     "/p:BlockOnPossibleDataLoss=false" `
     "/p:DropObjectsNotInSource=false" `
     "/p:TreatVerificationErrorsAsWarnings=true" `
