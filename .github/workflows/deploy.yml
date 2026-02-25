@@ -47,13 +47,12 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          $dest = "D:\DeploymentLogs"
-          if (!(Test-Path $dest)) { New-Item -ItemType Directory -Path $dest -Force }
-          $logs = Get-ChildItem -Filter "*.log"
+          $logDir = Join-Path $env:GITHUB_WORKSPACE "DeploymentLogs"
+          if (!(Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force }
+          $logs = Get-ChildItem -Path $logDir -Filter "*.log"
           if ($logs.Count -gt 0) {
-            Copy-Item "*.log" -Destination $dest -Force
-            Write-Host "Log saved to $dest"
+            Write-Host "Logs saved to $logDir"
             $logs | ForEach-Object { Write-Host "  - $($_.Name)" }
           } else {
-            Write-Host "No log files found to save"
+            Write-Host "No log files found in $logDir"
           }
