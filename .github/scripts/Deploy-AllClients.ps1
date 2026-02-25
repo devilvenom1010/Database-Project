@@ -75,7 +75,6 @@ $results = $clients | ForEach-Object -Parallel {
             /p:BlockOnPossibleDataLoss=false `
             /p:DropObjectsNotInSource=false `
             /p:TreatVerificationErrorsAsWarnings=true `
-            /TrustServerCertificate:True `
             2>&1
 
         if ($LASTEXITCODE -ne 0) {
