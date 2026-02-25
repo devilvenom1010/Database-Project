@@ -7,7 +7,7 @@ param(
 )
 
 # --- Log file setup ---
-$logFile = "$env:GITHUB_WORKSPACE\deployment-$((Get-Date).ToString('yyyy-MM-dd-HHmmss')).log"
+$logFile = "$env:GITHUB_WORKSPACE\DeploymentLogs\deployment-$((Get-Date).ToString('yyyy-MM-dd-HHmmss')).log"
 $logFile = "deployment-$((Get-Date).ToString('yyyy-MM-dd-HHmmss')).log"
 function Write-Log {
     param([string]$Message)
@@ -105,21 +105,19 @@ $clients | ForEach-Object -Parallel {
 
 } -ThrottleLimit 50   # 50 parallel deployments at a time — tune based on your server capacity
 
-Write-Log "Found $($clients.Count) active clients. Starting parallel deployment..."
-Write-Log "✅ [$($client.ClientName)] SUCCESS"
-Write-Log "❌ [$($client.ClientName)] FAILED: $message"
+# --- Summary Report ---
 Write-Log "===== DEPLOYMENT SUMMARY ====="
-Write-Log "✅ Succeeded: $($success.Count)"
-Write-Log "❌ Failed:    $($failed.Count)"
-Write-Log "  - $($_.Client): $($_.Error)"
-
+$failed  = $results | Where-Object { $_.Status -eq "Failed" }
+$success = $results | Where-Object { $_.Status -eq "Success" }
+Write-Log "Succeeded: $($success.Count)"
+Write-Log "Failed:    $($failed.Count)"
 
 if ($failed.Count -gt 0) {
-    Write-Log ""
     Write-Log "Failed clients:"
-    $failed | ForEach-Object { Write-Host "  - $($_.Client): $($_.Error)" }
-    exit 1   # Fail the GitHub Actions job so you get a red build
-} else {
-    Write-Host "All deployments succeeded!"
+    $failed | ForEach-Object { Write-Log "  - $($_.Client): $($_.Error)" }
+    exit 1
+}
+else {
+    Write-Log "All deployments succeeded!"
     exit 0
 }
