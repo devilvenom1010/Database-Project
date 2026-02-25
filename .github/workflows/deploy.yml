@@ -27,6 +27,11 @@ jobs:
             Write-Error "MSBuild failed with exit code $LASTEXITCODE"
             exit 1
           }
+      
+      - name: Find dacpac
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse -Filter "*.dacpac" | Select-Object FullName
 
       - name: Deploy to All Clients
         shell: pwsh
