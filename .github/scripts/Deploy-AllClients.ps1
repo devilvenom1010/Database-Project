@@ -69,7 +69,7 @@ $results = $clients | ForEach-Object -Parallel {
             /TargetUser:"$user" `
             /TargetPassword:"$pass" `
             /TargetTrustServerCertificate:True `
-            /TargetEncrypt:Optional `
+            /TargetEncrypt:false `
             /p:BlockOnPossibleDataLoss=false `
             /p:DropObjectsNotInSource=false `
             /p:TreatVerificationErrorsAsWarnings=true `
