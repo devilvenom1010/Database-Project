@@ -1,0 +1,52 @@
+name: Deploy Database to All Clients
+
+on:
+  push:
+    branches:
+      - main                  # Auto-deploy on every push to main
+  workflow_dispatch:          # Manual "Deploy All" button in GitHub UI
+    inputs:
+      reason:
+        description: 'Reason for manual deployment'
+        required: false
+        default: 'Manual deploy'
+
+jobs:
+  build-and-deploy:
+    runs-on: [self-hosted, windows, sql-deploy]   # Your on-prem runner
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Database Project (.dacpac)
+        shell: powershell
+        run: |
+          $msbuild = & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"
+          # Adjust the path above to match your VS install path
+          & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" `
+            "Database Project\Database Project\Database Project.sqlproj" `
+            /p:Configuration=Release `
+            /p:Platform="Any CPU"
+
+      - name: Deploy to All Clients
+        shell: powershell
+        env:
+          DEPLOY_SQL_USER:     ${{ secrets.DEPLOY_SQL_USER }}
+          DEPLOY_SQL_PASSWORD: ${{ secrets.DEPLOY_SQL_PASSWORD }}
+          REGISTRY_SERVER:     ${{ secrets.REGISTRY_SERVER }}
+          REGISTRY_DATABASE:   ${{ secrets.REGISTRY_DATABASE }}
+        run: |
+          .\.github\scripts\Deploy-AllClients.ps1 `
+            -DacpacPath     "Database Project\Database Project\bin\Release\Database Project.dacpac" `
+            -RegistryServer  $env:REGISTRY_SERVER `
+            -RegistryDatabase $env:REGISTRY_DATABASE `
+            -SqlUser         $env:DEPLOY_SQL_USER `
+            -SqlPassword     $env:DEPLOY_SQL_PASSWORD
+
+      - name: Upload deployment log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-log-${{ github.run_number }}
+          path: "*.log"
