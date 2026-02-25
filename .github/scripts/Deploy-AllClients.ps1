@@ -42,7 +42,7 @@ $conn.Close()
 Write-Host "Found $($clients.Count) active clients. Starting parallel deployment..."
 
 # --- Deploy to all clients in parallel ---
-$results = $clients | ForEach-Object -Parallel {
+$clients | ForEach-Object -Parallel {
     $client      = $_
     $dacpac      = $using:DacpacPath
     $user        = $using:SqlUser
