@@ -6,6 +6,17 @@ param(
     [string]$SqlPassword
 )
 
+# --- Log file setup ---
+$logFile = "$env:GITHUB_WORKSPACE\deployment-$((Get-Date).ToString('yyyy-MM-dd-HHmmss')).log"
+$logFile = "deployment-$((Get-Date).ToString('yyyy-MM-dd-HHmmss')).log"
+function Write-Log {
+    param([string]$Message)
+    $timestamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+    $line = "[$timestamp] $Message"
+    Write-Host $line
+    Add-Content -Path $logFile -Value $line
+}
+
 # --- Load client list from central registry ---
 $connStr = "Server=$RegistryServer;Database=$RegistryDatabase;User Id=$SqlUser;Password=$SqlPassword;TrustServerCertificate=True;"
 $query   = "SELECT ClientId, ClientName, ServerName, DatabaseName FROM dbo.ClientDeploymentRegistry WHERE IsActive = 1"
@@ -99,6 +110,15 @@ $failed  = $results | Where-Object { $_.Status -eq "Failed" }
 $success = $results | Where-Object { $_.Status -eq "Success" }
 Write-Host "✅ Succeeded: $($success.Count)"
 Write-Host "❌ Failed:    $($failed.Count)"
+
+Write-Log "Found $($clients.Count) active clients. Starting parallel deployment..."
+Write-Log "✅ [$($client.ClientName)] SUCCESS"
+Write-Log "❌ [$($client.ClientName)] FAILED: $message"
+Write-Log "===== DEPLOYMENT SUMMARY ====="
+Write-Log "✅ Succeeded: $($success.Count)"
+Write-Log "❌ Failed:    $($failed.Count)"
+Write-Log "  - $($_.Client): $($_.Error)"
+
 
 if ($failed.Count -gt 0) {
     Write-Host ""
