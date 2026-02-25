@@ -78,7 +78,7 @@ $results = $clients | ForEach-Object -Parallel {
     )
     $updateConn.Open()
     $updateCmd = $updateConn.CreateCommand()
-    $updateCmd.CommandText = "UPDATE dbo.ClientDeploymentRegistry SET LastDeployedAt = GETUTCDATE(), LastDeployStatus = @s WHERE ClientId = @id"
+    $updateCmd.CommandText = "UPDATE dbo.ClientDeploymentRegistry SET LastDeployedAt = GETDATE(), LastDeployStatus = @s WHERE ClientId = @id"
     $updateCmd.Parameters.AddWithValue("@s",  $status)           | Out-Null
     $updateCmd.Parameters.AddWithValue("@id", $client.ClientId)  | Out-Null
     $updateCmd.ExecuteNonQuery() | Out-Null
