@@ -9,6 +9,7 @@ on:
         description: 'Reason for manual deployment'
         required: false
         default: 'Manual deploy'
+
 jobs:
   build-and-deploy:
     runs-on: [self-hosted, windows, sql-deploy]
@@ -42,9 +43,17 @@ jobs:
             -SqlUser          $env:DEPLOY_SQL_USER `
             -SqlPassword      $env:DEPLOY_SQL_PASSWORD
 
-      - name: Upload deployment log
+      - name: Save deployment log locally
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: deployment-log-${{ github.run_number }}
-          path: "${{ github.workspace }}\\*.log"
+        shell: pwsh
+        run: |
+          $dest = "D:\DeploymentLogs"
+          if (!(Test-Path $dest)) { New-Item -ItemType Directory -Path $dest -Force }
+          $logs = Get-ChildItem -Filter "*.log"
+          if ($logs.Count -gt 0) {
+            Copy-Item "*.log" -Destination $dest -Force
+            Write-Host "Log saved to $dest"
+            $logs | ForEach-Object { Write-Host "  - $($_.Name)" }
+          } else {
+            Write-Host "No log files found to save"
+          }
