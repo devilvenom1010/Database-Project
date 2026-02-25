@@ -27,11 +27,6 @@ jobs:
             Write-Error "MSBuild failed with exit code $LASTEXITCODE"
             exit 1
           }
-      
-      - name: Find dacpac
-        shell: pwsh
-        run: |
-          Get-ChildItem -Recurse -Filter "*.dacpac" | ForEach-Object { Write-Host $_.FullName }
 
       - name: Deploy to All Clients
         shell: pwsh
@@ -42,7 +37,7 @@ jobs:
           REGISTRY_DATABASE:    ${{ secrets.REGISTRY_DATABASE }}
         run: |
           .\.github\scripts\Deploy-AllClients.ps1 `
-            -DacpacPath       "Database Project\Database Project\bin\Output\Database Project.dacpac" `
+            -DacpacPath       "Database Project\bin\Output\Database Project.dacpac" `
             -RegistryServer   $env:REGISTRY_SERVER `
             -RegistryDatabase $env:REGISTRY_DATABASE `
             -SqlUser          $env:DEPLOY_SQL_USER `
