@@ -7,8 +7,11 @@ param(
 )
 
 # --- Log file setup ---
-$logFile = "$env:GITHUB_WORKSPACE\DeploymentLogs\deployment-$((Get-Date).ToString('yyyy-MM-dd-HHmmss')).log"
-$logFile = "deployment-$((Get-Date).ToString('yyyy-MM-dd-HHmmss')).log"
+$repoRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
+$logDir   = Join-Path $repoRoot "DeploymentLogs"
+if (!(Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+$logFile  = Join-Path $logDir "deployment-$((Get-Date).ToString('yyyy-MM-dd-HHmmss')).log"
+
 function Write-Log {
     param([string]$Message)
     $timestamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
@@ -18,84 +21,97 @@ function Write-Log {
 }
 
 # --- Load client list from central registry ---
-$connStr = "Server=$RegistryServer;Database=$RegistryDatabase;User Id=$SqlUser;Password=$SqlPassword;TrustServerCertificate=True;"
+$connStr = "Server=$RegistryServer;Database=$RegistryDatabase;User Id=$SqlUser;Password=$SqlPassword;TrustServerCertificate=True;Encrypt=False;"
 $query   = "SELECT ClientId, ClientName, ServerName, DatabaseName FROM dbo.ClientDeploymentRegistry WHERE IsActive = 1"
 
-$conn = New-Object System.Data.SqlClient.SqlConnection($connStr)
-$conn.Open()
-$cmd  = $conn.CreateCommand()
-$cmd.CommandText = $query
-$reader = $cmd.ExecuteReader()
+try {
+    $conn = New-Object System.Data.SqlClient.SqlConnection($connStr)
+    $conn.Open()
+    $cmd  = $conn.CreateCommand()
+    $cmd.CommandText = $query
+    $reader = $cmd.ExecuteReader()
 
-$clients = @()
-while ($reader.Read()) {
-    $clients += [PSCustomObject]@{
-        ClientId     = $reader["ClientId"]
-        ClientName   = $reader["ClientName"]
-        ServerName   = $reader["ServerName"]
-        DatabaseName = $reader["DatabaseName"]
+    $clients = @()
+    while ($reader.Read()) {
+        $clients += [PSCustomObject]@{
+            ClientId     = $reader["ClientId"]
+            ClientName   = $reader["ClientName"]
+            ServerName   = $reader["ServerName"]
+            DatabaseName = $reader["DatabaseName"]
+        }
     }
+    $reader.Close()
+    $conn.Close()
 }
-$reader.Close()
-$conn.Close()
+catch {
+    Write-Log "FATAL: Could not connect to registry database. Error: $($_.Exception.Message)"
+    exit 1
+}
 
-Write-Host "Found $($clients.Count) active clients. Starting parallel deployment..."
+Write-Log "Found $($clients.Count) active clients. Starting parallel deployment..."
 
 # --- Deploy to all clients in parallel ---
-$clients | ForEach-Object -Parallel {
-    $client      = $_
-    $dacpac      = $using:DacpacPath
-    $user        = $using:SqlUser
-    $pass        = $using:SqlPassword
-    $regServer   = $using:RegistryServer
-    $regDb       = $using:RegistryDatabase
+$results = $clients | ForEach-Object -Parallel {
+    $client    = $_
+    $dacpac    = $using:DacpacPath
+    $user      = $using:SqlUser
+    $pass      = $using:SqlPassword
+    $regServer = $using:RegistryServer
+    $regDb     = $using:RegistryDatabase
+    $logFile   = $using:logFile
 
     $status  = "Success"
     $message = ""
 
     try {
-        $result = & sqlpackage `
-    "/Action:Publish" `
-    "/SourceFile:$dacpac" `
-    "/TargetServerName:$($client.ServerName)" `
-    "/TargetDatabaseName:$($client.DatabaseName)" `
-    "/TargetUser:$user" `
-    "/TargetPassword:$pass" `
-    "/TargetTrustServerCertificate:True" `
-    "/TargetEncrypt:Optional" `
-    "/p:BlockOnPossibleDataLoss=false" `
-    "/p:DropObjectsNotInSource=false" `
-    "/p:TreatVerificationErrorsAsWarnings=true" `
-    "/TargetTrustServerCertificate:True"`
-    2>&1
+        $output = & sqlpackage `
+            "/Action:Publish" `
+            "/SourceFile:$dacpac" `
+            "/TargetServerName:$($client.ServerName)" `
+            "/TargetDatabaseName:$($client.DatabaseName)" `
+            "/TargetUser:$user" `
+            "/TargetPassword:$pass" `
+            "/TargetTrustServerCertificate:True" `
+            "/TargetEncrypt:Optional" `
+            "/p:BlockOnPossibleDataLoss=false" `
+            "/p:DropObjectsNotInSource=false" `
+            "/p:TreatVerificationErrorsAsWarnings=true" `
+            2>&1
 
-        $result = & sqlpackage @args 2>&1
         if ($LASTEXITCODE -ne 0) {
-            throw $result
+            throw ($output -join "`n")
         }
 
-        Write-Host "✅ [$($client.ClientName)] SUCCESS"
+        $line = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))] SUCCESS: $($client.ClientName)"
+        Write-Host $line
+        Add-Content -Path $logFile -Value $line
     }
     catch {
         $status  = "Failed"
         $message = $_.Exception.Message
-        Write-Host "❌ [$($client.ClientName)] FAILED: $message"
-
-        # Per-client rollback is handled by SqlPackage's transaction wrapper automatically.
-        # The dacpac deployment runs inside a transaction per target DB — failure rolls back that DB only.
+        $line = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))] FAILED: $($client.ClientName) - $message"
+        Write-Host $line
+        Add-Content -Path $logFile -Value $line
     }
 
     # --- Update registry with result ---
-    $updateConn = New-Object System.Data.SqlClient.SqlConnection(
-        "Server=$regServer;Database=$regDb;User Id=$user;Password=$pass;TrustServerCertificate=True;"
-    )
-    $updateConn.Open()
-    $updateCmd = $updateConn.CreateCommand()
-    $updateCmd.CommandText = "UPDATE dbo.ClientDeploymentRegistry SET LastDeployedAt = GETDATE(), LastDeployStatus = @s WHERE ClientId = @id"
-    $updateCmd.Parameters.AddWithValue("@s",  $status)           | Out-Null
-    $updateCmd.Parameters.AddWithValue("@id", $client.ClientId)  | Out-Null
-    $updateCmd.ExecuteNonQuery() | Out-Null
-    $updateConn.Close()
+    try {
+        $updateConn = New-Object System.Data.SqlClient.SqlConnection(
+            "Server=$regServer;Database=$regDb;User Id=$user;Password=$pass;TrustServerCertificate=True;Encrypt=False;"
+        )
+        $updateConn.Open()
+        $updateCmd = $updateConn.CreateCommand()
+        $updateCmd.CommandText = "UPDATE dbo.ClientDeploymentRegistry SET LastDeployedAt = GETDATE(), LastDeployStatus = @s WHERE ClientId = @id"
+        $updateCmd.Parameters.AddWithValue("@s",  $status)          | Out-Null
+        $updateCmd.Parameters.AddWithValue("@id", $client.ClientId) | Out-Null
+        $updateCmd.ExecuteNonQuery() | Out-Null
+        $updateConn.Close()
+    }
+    catch {
+        $line = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))] WARNING: Could not update registry for $($client.ClientName) - $($_.Exception.Message)"
+        Write-Host $line
+        Add-Content -Path $logFile -Value $line
+    }
 
     return [PSCustomObject]@{
         Client = $client.ClientName
@@ -103,7 +119,7 @@ $clients | ForEach-Object -Parallel {
         Error  = $message
     }
 
-} -ThrottleLimit 50   # 50 parallel deployments at a time — tune based on your server capacity
+} -ThrottleLimit 50
 
 # --- Summary Report ---
 Write-Log "===== DEPLOYMENT SUMMARY ====="
