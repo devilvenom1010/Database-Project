@@ -1,0 +1,54 @@
+# =====================
+# Build Output
+# =====================
+bin/
+obj/
+*.dacpac
+*.dpkg
+
+# =====================
+# Visual Studio
+# =====================
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+*.rsuser
+
+# =====================
+# VS Code
+# =====================
+.vscode/
+
+# =====================
+# SQL Server Data Tools
+# =====================
+*.dbmdl
+*.dbproj.schemaview
+*.jfm
+
+# =====================
+# Windows
+# =====================
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# =====================
+# Logs & Temp Files
+# =====================
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+
+# =====================
+# Publish Profiles
+# =====================
+*.publish.xml
+*.pubxml
+*.pubxml.user

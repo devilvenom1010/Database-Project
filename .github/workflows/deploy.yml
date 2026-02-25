@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build Database Project (.dacpac)
-        shell: powershell
+        shell: pwsh
         run: |
           $msbuildPath = "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe"
           $projectPath = "Database Project\Database Project.sqlproj"
@@ -28,7 +28,7 @@ jobs:
           }
 
       - name: Deploy to All Clients
-        shell: powershell
+        shell: pwsh
         env:
           DEPLOY_SQL_USER:      ${{ secrets.DEPLOY_SQL_USER }}
           DEPLOY_SQL_PASSWORD:  ${{ secrets.DEPLOY_SQL_PASSWORD }}
