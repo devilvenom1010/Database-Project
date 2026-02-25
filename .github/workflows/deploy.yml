@@ -42,7 +42,7 @@ jobs:
           REGISTRY_DATABASE:    ${{ secrets.REGISTRY_DATABASE }}
         run: |
           .\.github\scripts\Deploy-AllClients.ps1 `
-            -DacpacPath       "Database Project\Database Project\bin\Release\Database Project.dacpac" `
+            -DacpacPath       "Database Project\Database Project\bin\Output\Database Project.dacpac" `
             -RegistryServer   $env:REGISTRY_SERVER `
             -RegistryDatabase $env:REGISTRY_DATABASE `
             -SqlUser          $env:DEPLOY_SQL_USER `
