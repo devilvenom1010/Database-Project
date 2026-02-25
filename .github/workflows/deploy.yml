@@ -37,7 +37,7 @@ jobs:
           REGISTRY_DATABASE:    ${{ secrets.REGISTRY_DATABASE }}
         run: |
           .\.github\scripts\Deploy-AllClients.ps1 `
-            -DacpacPath       "Database Project\bin\Release\Database Project.dacpac" `
+            -DacpacPath       "Database Project\Database Project\bin\Release\Database Project.dacpac" `
             -RegistryServer   $env:REGISTRY_SERVER `
             -RegistryDatabase $env:REGISTRY_DATABASE `
             -SqlUser          $env:DEPLOY_SQL_USER `
@@ -47,7 +47,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          $logDir = Join-Path $env:GITHUB_WORKSPACE "DeploymentLogs"
+          $logDir = "D:\Database Deployment\Database Project\DeploymentLogs"
           if (!(Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force }
           $logs = Get-ChildItem -Path $logDir -Filter "*.log"
           if ($logs.Count -gt 0) {
