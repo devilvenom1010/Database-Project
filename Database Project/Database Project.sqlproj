@@ -108,6 +108,6 @@
     <Build Include="Types\TYPE_CBS_TellerTransaction_Charge.sql" />
     <Build Include="Types\TYPE_CBS_TellerTransaction_Deno.sql" />
     <Build Include="Types\TYPE_CBS_Voucher.sql" />
-    <Build Include="StoredProcedures\USP_DP_DeploymentTestProcedure.sql" />
+    <Build Include="StoredProcedures\USP_CBS_DeploymentTestProcedure.sql" />
   </ItemGroup>
 </Project>
