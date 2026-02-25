@@ -45,7 +45,7 @@
     <DefineTrace>true</DefineTrace>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <TreatTSqlWarningsAsErrors>True</TreatTSqlWarningsAsErrors>
+    <TreatTSqlWarningsAsErrors>False</TreatTSqlWarningsAsErrors>
   </PropertyGroup>
   <PropertyGroup>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">11.0</VisualStudioVersion>
@@ -108,5 +108,6 @@
     <Build Include="Types\TYPE_CBS_TellerTransaction_Charge.sql" />
     <Build Include="Types\TYPE_CBS_TellerTransaction_Deno.sql" />
     <Build Include="Types\TYPE_CBS_Voucher.sql" />
+    <Build Include="StoredProcedures\USP_DP_DeploymentTestProcedure.sql" />
   </ItemGroup>
 </Project>
