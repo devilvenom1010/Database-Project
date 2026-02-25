@@ -65,18 +65,17 @@ $results = $clients | ForEach-Object -Parallel {
 
     try {
         $output = & sqlpackage `
-            "/Action:Publish" `
-            "/SourceFile:$dacpac" `
-            "/TargetServerName:$($client.ServerName)" `
-            "/TargetDatabaseName:$($client.DatabaseName)" `
-            "/TargetUser:$user" `
-            "/TargetPassword:$pass" `
-            "/TargetTrustServerCertificate:True" `
-            "/TargetEncrypt:Optional" `
-            "/p:BlockOnPossibleDataLoss=false" `
-            "/p:DropObjectsNotInSource=false" `
-            "/p:TreatVerificationErrorsAsWarnings=true" `
-            "/TargetTrustServerCertificate:True"`
+            /Action:Publish `
+            /SourceFile:"$dacpac" `
+            /TargetServerName:"$($client.ServerName)" `
+            /TargetDatabaseName:"$($client.DatabaseName)" `
+            /TargetUser:"$user" `
+            /TargetPassword:"$pass" `
+            /TargetTrustServerCertificate:True `
+            /p:BlockOnPossibleDataLoss=false `
+            /p:DropObjectsNotInSource=false `
+            /p:TreatVerificationErrorsAsWarnings=true `
+            /TrustServerCertificate:True `
             2>&1
 
         if ($LASTEXITCODE -ne 0) {
