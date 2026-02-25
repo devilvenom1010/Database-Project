@@ -2,5 +2,7 @@
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <TargetDatabase>Database Project_2</TargetDatabase>
+    <StartupScript>(Blank)</StartupScript>
+    <StartAction>StartNone</StartAction>
   </PropertyGroup>
 </Project>

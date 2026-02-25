@@ -7,7 +7,8 @@ param(
 )
 
 # --- Log file setup ---
-$logDir   = "D:\Database Deployment\Database Project\DeploymentLogs"
+$repoRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
+$logDir   = Join-Path $repoRoot "DeploymentLogs"
 if (!(Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 $logFile  = Join-Path $logDir "deployment-$((Get-Date).ToString('yyyy-MM-dd-HHmmss')).log"
 
@@ -127,8 +128,16 @@ Write-Log "Succeeded: $($success.Count)"
 Write-Log "Failed:    $($failed.Count)"
 
 if ($failed.Count -gt 0) {
-    Write-Log "Failed clients:"
-    $failed | ForEach-Object { Write-Log "  - $($_.Client): $($_.Error)" }
+    Write-Log ""
+    Write-Log "===== FAILED CLIENTS AND SCRIPTS ====="
+    $failed | ForEach-Object {
+        Write-Log "CLIENT: $($_.Client)"
+        # Extract just the procedure/object names from the error
+        $errorLines = $_.Error -split "`n"
+        $scriptErrors = $errorLines | Where-Object { $_ -match "Procedure|Invalid column|Error SQL" } | ForEach-Object { $_.Trim() }
+        $scriptErrors | Select-Object -Unique | ForEach-Object { Write-Log "  ERROR: $_" }
+        Write-Log "---"
+    }
     exit 1
 }
 else {
