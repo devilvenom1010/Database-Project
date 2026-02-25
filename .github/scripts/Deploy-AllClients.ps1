@@ -78,19 +78,20 @@ $results = $clients | ForEach-Object -Parallel {
             2>&1
 
         if ($LASTEXITCODE -ne 0) {
-            throw ($output -join "`n")
+            # Extract only meaningful error lines, skip informational output
+            $errorLines = $output | Where-Object {
+                $_ -match "Error SQL|Invalid column|Invalid object|Cannot find|Could not|Msg \d+"
+            }
+            throw ($errorLines -join " | ")
         }
 
-        $line = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))] SUCCESS: $($client.ClientName)"
+        $line = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))] SUCCESS: $($client.ClientName) ($($client.DatabaseName))"
         Write-Host $line
         Add-Content -Path $logFile -Value $line
     }
     catch {
         $status  = "Failed"
         $message = $_.Exception.Message
-        $line = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))] FAILED: $($client.ClientName) - $message"
-        Write-Host $line
-        Add-Content -Path $logFile -Value $line
     }
 
     # --- Update registry with result ---
@@ -113,34 +114,53 @@ $results = $clients | ForEach-Object -Parallel {
     }
 
     return [PSCustomObject]@{
-        Client = $client.ClientName
-        Status = $status
-        Error  = $message
+        Client   = $client.ClientName
+        Database = $client.DatabaseName
+        Status   = $status
+        Error    = $message
     }
 
 } -ThrottleLimit 50
 
-# --- Summary Report ---
-Write-Log "===== DEPLOYMENT SUMMARY ====="
+# --- Summary first ---
 $failed  = $results | Where-Object { $_.Status -eq "Failed" }
 $success = $results | Where-Object { $_.Status -eq "Success" }
+
+Write-Log ""
+Write-Log "===== DEPLOYMENT SUMMARY ====="
 Write-Log "Succeeded: $($success.Count)"
 Write-Log "Failed:    $($failed.Count)"
+if ($success.Count -gt 0) {
+    Write-Log ""
+    Write-Log "--- Successful Clients ---"
+    $success | ForEach-Object { Write-Log "  + $($_.Client) ($($_.Database))" }
+}
 
+# --- Failed details after summary ---
 if ($failed.Count -gt 0) {
     Write-Log ""
-    Write-Log "===== FAILED CLIENTS AND SCRIPTS ====="
+    Write-Log "--- Failed Clients ---"
     $failed | ForEach-Object {
-        Write-Log "CLIENT: $($_.Client)"
-        # Extract just the procedure/object names from the error
-        $errorLines = $_.Error -split "`n"
-        $scriptErrors = $errorLines | Where-Object { $_ -match "Procedure|Invalid column|Error SQL" } | ForEach-Object { $_.Trim() }
-        $scriptErrors | Select-Object -Unique | ForEach-Object { Write-Log "  ERROR: $_" }
-        Write-Log "---"
+        Write-Log "  CLIENT:   $($_.Client) ($($_.Database))"
+        # Extract just procedure names and column errors
+        $_.Error -split "\|" | ForEach-Object {
+            $part = $_.Trim()
+            if ($part -match "Procedure (\S+)") {
+                Write-Log "  SCRIPT:   $($Matches[1])"
+            }
+            if ($part -match "Invalid column name '(\S+)'") {
+                Write-Log "  ERROR:    Invalid column: $($Matches[1])"
+            }
+            if ($part -match "Invalid object name '(\S+)'") {
+                Write-Log "  ERROR:    Invalid object: $($Matches[1])"
+            }
+        }
+        Write-Log "  ---"
     }
     exit 1
 }
 else {
+    Write-Log ""
     Write-Log "All deployments succeeded!"
     exit 0
 }
