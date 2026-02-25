@@ -7,9 +7,7 @@ BEGIN
 	PRINT 'This is final testing'
 	SELECT 'This is final testing'
 	
-	
-	SELECT 'This is final testing'
-	SELECT 'This is final testing'
+	SELECT 'HAHA'
 
 
 END
