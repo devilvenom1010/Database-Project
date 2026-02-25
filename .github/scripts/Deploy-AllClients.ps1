@@ -7,8 +7,7 @@ param(
 )
 
 # --- Log file setup ---
-$repoRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
-$logDir   = Join-Path $repoRoot "DeploymentLogs"
+$logDir   = "D:\Database Deployment\Database Project\DeploymentLogs"
 if (!(Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 $logFile  = Join-Path $logDir "deployment-$((Get-Date).ToString('yyyy-MM-dd-HHmmss')).log"
 
