@@ -10,5 +10,7 @@ BEGIN
 	SELECT 'HAHA'
 
 
+	PRINT 1111
+
 END
 
