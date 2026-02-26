@@ -3,13 +3,14 @@ param(
     [string]$RegistryServer,
     [string]$RegistryDatabase,
     [string]$SqlUser,
-    [string]$SqlPassword
+    [string]$SqlPassword,
+    [string]$VersionNumber
 )
 
 # --- Log file setup ---
-$logDir   = "D:\Database Deployment\Database Project\DeploymentLogs"
+$logDir = "D:\Database Deployment\Database Project\DeploymentLogs"
 if (!(Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
-$logFile  = Join-Path $logDir "deployment-$((Get-Date).ToString('yyyy-MM-dd-HHmmss')).log"
+$logFile = Join-Path $logDir "deployment-$((Get-Date).ToString('yyyy-MM-dd-HHmmss')).log"
 
 function Write-Log {
     param([string]$Message)
@@ -21,12 +22,12 @@ function Write-Log {
 
 # --- Load client list from central registry ---
 $connStr = "Server=$RegistryServer;Database=$RegistryDatabase;User Id=$SqlUser;Password=$SqlPassword;TrustServerCertificate=True;Encrypt=False;"
-$query   = "SELECT ClientId, ClientName, ServerName, DatabaseName FROM dbo.ClientDeploymentRegistry WHERE IsActive = 1"
+$query = "SELECT ClientId, ClientName, ServerName, DatabaseName FROM dbo.ClientDeploymentRegistry WHERE IsActive = 1"
 
 try {
     $conn = New-Object System.Data.SqlClient.SqlConnection($connStr)
     $conn.Open()
-    $cmd  = $conn.CreateCommand()
+    $cmd = $conn.CreateCommand()
     $cmd.CommandText = $query
     $reader = $cmd.ExecuteReader()
 
@@ -51,15 +52,16 @@ Write-Log "Found $($clients.Count) active clients. Starting parallel deployment.
 
 # --- Deploy to all clients in parallel ---
 $results = $clients | ForEach-Object -Parallel {
-    $client    = $_
-    $dacpac    = $using:DacpacPath
-    $user      = $using:SqlUser
-    $pass      = $using:SqlPassword
+    $client = $_
+    $dacpac = $using:DacpacPath
+    $user = $using:SqlUser
+    $pass = $using:SqlPassword
     $regServer = $using:RegistryServer
-    $regDb     = $using:RegistryDatabase
-    $logFile   = $using:logFile
+    $regDb = $using:RegistryDatabase
+    $logFile = $using:logFile
+    $versionNu = $using:VersionNumber
 
-    $status  = "Success"
+    $status = "Success"
     $message = ""
 
     try {
@@ -89,7 +91,7 @@ $results = $clients | ForEach-Object -Parallel {
         Add-Content -Path $logFile -Value $line
     }
     catch {
-        $status  = "Failed"
+        $status = "Failed"
         $message = $_.Exception.Message
     }
 
@@ -99,11 +101,33 @@ $results = $clients | ForEach-Object -Parallel {
             "Server=$regServer;Database=$regDb;User Id=$user;Password=$pass;TrustServerCertificate=True;Encrypt=False;"
         )
         $updateConn.Open()
+        
+        # 1. Insert into history table
+        $historyCmd = $updateConn.CreateCommand()
+        $historyCmd.CommandText = @"
+INSERT INTO dbo.ClientDeploymentHistory (ClientId, DeployedBy, DeployedAt, DeployStatus, VersionNumber, ErrorMessage)
+VALUES (@id, @user, GETDATE(), @s, @version, @error)
+"@
+        $historyCmd.Parameters.AddWithValue("@id", $client.ClientId) | Out-Null
+        $historyCmd.Parameters.AddWithValue("@user", "GitHub Actions") | Out-Null
+        $historyCmd.Parameters.AddWithValue("@s", $status) | Out-Null
+        $historyCmd.Parameters.AddWithValue("@version", [string]::IsNullOrEmpty($versionNu) ? [System.DBNull]::Value : $versionNu) | Out-Null
+        $historyCmd.Parameters.AddWithValue("@error", [string]::IsNullOrEmpty($message) ? [System.DBNull]::Value : $message) | Out-Null
+        $historyCmd.ExecuteNonQuery() | Out-Null
+        
+        # 2. Update registry
         $updateCmd = $updateConn.CreateCommand()
-        $updateCmd.CommandText = "UPDATE dbo.ClientDeploymentRegistry SET LastDeployedAt = GETDATE(), LastDeployStatus = @s WHERE ClientId = @id"
-        $updateCmd.Parameters.AddWithValue("@s",  $status)          | Out-Null
+        if ($status -eq "Success" -and -not [string]::IsNullOrEmpty($versionNu)) {
+            $updateCmd.CommandText = "UPDATE dbo.ClientDeploymentRegistry SET LastDeployedAt = GETDATE(), LastDeployStatus = @s, ActiveVersion = @v WHERE ClientId = @id"
+            $updateCmd.Parameters.AddWithValue("@v", $versionNu) | Out-Null
+        }
+        else {
+            $updateCmd.CommandText = "UPDATE dbo.ClientDeploymentRegistry SET LastDeployedAt = GETDATE(), LastDeployStatus = @s WHERE ClientId = @id"
+        }
+        $updateCmd.Parameters.AddWithValue("@s", $status)          | Out-Null
         $updateCmd.Parameters.AddWithValue("@id", $client.ClientId) | Out-Null
         $updateCmd.ExecuteNonQuery() | Out-Null
+        
         $updateConn.Close()
     }
     catch {
@@ -122,7 +146,7 @@ $results = $clients | ForEach-Object -Parallel {
 } -ThrottleLimit 50
 
 # --- Summary first ---
-$failed  = $results | Where-Object { $_.Status -eq "Failed" }
+$failed = $results | Where-Object { $_.Status -eq "Failed" }
 $success = $results | Where-Object { $_.Status -eq "Success" }
 
 Write-Log ""

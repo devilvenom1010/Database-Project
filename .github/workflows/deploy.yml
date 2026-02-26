@@ -9,6 +9,10 @@ on:
         description: 'Reason for manual deployment'
         required: false
         default: 'Manual deploy'
+      version:
+        description: 'Release version to deploy (e.g., v1.2.0)'
+        required: false
+        default: ''
 
 jobs:
   build-and-deploy:
@@ -41,7 +45,8 @@ jobs:
             -RegistryServer   $env:REGISTRY_SERVER `
             -RegistryDatabase $env:REGISTRY_DATABASE `
             -SqlUser          $env:DEPLOY_SQL_USER `
-            -SqlPassword      $env:DEPLOY_SQL_PASSWORD
+            -SqlPassword      $env:DEPLOY_SQL_PASSWORD `
+            -VersionNumber    "${{ github.event.inputs.version || github.run_number }}"
 
       - name: Save deployment log locally
         if: always()
