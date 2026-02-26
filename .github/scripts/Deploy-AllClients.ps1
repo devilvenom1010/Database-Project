@@ -95,6 +95,34 @@ $results = $clients | ForEach-Object -Parallel {
         $message = $_.Exception.Message
     }
 
+    # --- Update client SchemaVersion table ---
+    if ($status -eq "Success" -and -not [string]::IsNullOrEmpty($versionNu)) {
+        try {
+            $clientConn = New-Object System.Data.SqlClient.SqlConnection("Server=$($client.ServerName);Database=$($client.DatabaseName);User Id=$user;Password=$pass;TrustServerCertificate=True;Encrypt=False;")
+            $clientConn.Open()
+            $clientCmd = $clientConn.CreateCommand()
+            $clientCmd.CommandText = @"
+IF NOT EXISTS (SELECT 1 FROM dbo.SchemaVersion WHERE VersionNumber = @v)
+BEGIN
+    INSERT INTO dbo.SchemaVersion (VersionNumber, DeployedOn, DeployedBy)
+    VALUES (@v, GETDATE(), 'GitHub Actions')
+END
+ELSE
+BEGIN
+    UPDATE dbo.SchemaVersion SET DeployedOn = GETDATE(), DeployedBy = 'GitHub Actions' WHERE VersionNumber = @v
+END
+"@
+            $clientCmd.Parameters.AddWithValue("@v", $versionNu) | Out-Null
+            $clientCmd.ExecuteNonQuery() | Out-Null
+            $clientConn.Close()
+        }
+        catch {
+            $line = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))] WARNING: Could not update SchemaVersion on client database for $($client.ClientName) - $($_.Exception.Message)"
+            Write-Host $line
+            Add-Content -Path $logFile -Value $line
+        }
+    }
+
     # --- Update registry with result ---
     try {
         $updateConn = New-Object System.Data.SqlClient.SqlConnection(
