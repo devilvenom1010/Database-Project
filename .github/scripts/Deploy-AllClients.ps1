@@ -20,8 +20,42 @@ function Write-Log {
     Add-Content -Path $logFile -Value $line
 }
 
-# --- Load client list from central registry ---
+# --- Initialize Registry Schema if missing ---
 $connStr = "Server=$RegistryServer;Database=$RegistryDatabase;User Id=$SqlUser;Password=$SqlPassword;TrustServerCertificate=True;Encrypt=False;"
+try {
+    $initConn = New-Object System.Data.SqlClient.SqlConnection($connStr)
+    $initConn.Open()
+    $initCmd = $initConn.CreateCommand()
+    $initCmd.CommandText = @"
+IF OBJECT_ID('dbo.ClientDeploymentHistory', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ClientDeploymentHistory
+    (
+        HistoryId INT IDENTITY(1,1) PRIMARY KEY,
+        ClientId INT NOT NULL,
+        DeployedBy VARCHAR(100) NOT NULL,
+        DeployedAt DATETIME NOT NULL DEFAULT GETDATE(),
+        DeployStatus VARCHAR(50) NOT NULL,
+        VersionNumber VARCHAR(50) NULL,
+        ErrorMessage NVARCHAR(MAX) NULL
+    );
+END
+
+IF COL_LENGTH('dbo.ClientDeploymentRegistry', 'ActiveVersion') IS NULL
+BEGIN
+    ALTER TABLE dbo.ClientDeploymentRegistry ADD ActiveVersion VARCHAR(50) NULL;
+END
+"@
+    $initCmd.ExecuteNonQuery() | Out-Null
+    $initConn.Close()
+    Write-Log "Registry database schema verified."
+}
+catch {
+    Write-Log "WARNING: Could not verify/initialize Registry database schema. Error: $($_.Exception.Message)"
+}
+
+
+# --- Load client list from central registry ---
 $query = "SELECT ClientId, ClientName, ServerName, DatabaseName FROM dbo.ClientDeploymentRegistry WHERE IsActive = 1"
 
 try {
