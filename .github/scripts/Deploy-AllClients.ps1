@@ -125,9 +125,10 @@ $results = $clients | ForEach-Object -Parallel {
             throw "[Script generation failed] $errText"
         }
 
-        # Step 1b: Compile-validate using SET NOEXEC ON.
-        # SQL Server compiles every statement (catching invalid column/object references in
-        # stored procedures) but executes NOTHING — no locks, no transaction log, no blocking.
+        # Step 1b: Dry-run inside a rolled-back ADO.NET transaction.
+        # Every GO-batch is executed for real inside one transaction, then always rolled back.
+        # Unlike SET NOEXEC ON, real execution means CREATE TYPE/TABLE in early batches are
+        # visible to later batches — so procedures referencing newly-deployed UDTs compile fine.
         $generatedSql = Get-Content -Path $tempScript -Raw
         if (Test-Path $tempScript) { Remove-Item $tempScript -Force }
 
@@ -166,32 +167,30 @@ $results = $clients | ForEach-Object -Parallel {
             "Server=$($client.ServerName);Database=$($client.DatabaseName);User Id=$user;Password=$pass;TrustServerCertificate=True;Encrypt=False;"
         )
         $trialConn.Open()
+        $trialTxn = $trialConn.BeginTransaction()
         try {
-            # Turn NOEXEC on once for the connection — all subsequent batches compile but don't run
-            $noexecCmd = $trialConn.CreateCommand()
-            $noexecCmd.CommandText = "SET NOEXEC ON;"
-            $noexecCmd.ExecuteNonQuery() | Out-Null
+            # SET XACT_ABORT ON so any batch error immediately aborts the transaction.
+            $xactCmd = $trialConn.CreateCommand()
+            $xactCmd.Transaction = $trialTxn
+            $xactCmd.CommandText = "SET XACT_ABORT ON;"
+            $xactCmd.ExecuteNonQuery() | Out-Null
 
             foreach ($batch in $batches) {
                 if ([string]::IsNullOrWhiteSpace($batch)) { continue }
 
                 $batchCmd = $trialConn.CreateCommand()
+                $batchCmd.Transaction = $trialTxn
                 $batchCmd.CommandText = $batch
                 $batchCmd.CommandTimeout = 120
-                $batchCmd.ExecuteNonQuery() | Out-Null   # compiles only, never runs
+                $batchCmd.ExecuteNonQuery() | Out-Null
             }
         }
         catch {
-            throw "[Compile-validation failed — no changes were applied] $($_.Exception.Message)"
+            throw "[Dry-run failed — no changes were applied] $($_.Exception.Message)"
         }
         finally {
-            # Always turn NOEXEC off before closing (good practice)
-            try {
-                $resetCmd = $trialConn.CreateCommand()
-                $resetCmd.CommandText = "SET NOEXEC OFF;"
-                $resetCmd.ExecuteNonQuery() | Out-Null
-            }
-            catch {}
+            # Always roll back — the transaction exists only to validate, never to persist.
+            try { $trialTxn.Rollback() } catch {}
             $trialConn.Close()
         }
 
