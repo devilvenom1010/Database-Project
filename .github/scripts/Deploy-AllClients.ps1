@@ -178,11 +178,25 @@ $results = $clients | ForEach-Object -Parallel {
             foreach ($batch in $batches) {
                 if ([string]::IsNullOrWhiteSpace($batch)) { continue }
 
-                $batchCmd = $trialConn.CreateCommand()
-                $batchCmd.Transaction = $trialTxn
-                $batchCmd.CommandText = $batch
-                $batchCmd.CommandTimeout = 120
-                $batchCmd.ExecuteNonQuery() | Out-Null
+                # Extract the object name from this batch so we can report it on failure.
+                # Matches: CREATE/ALTER PROCEDURE|TABLE|TYPE|VIEW|FUNCTION [schema.]name
+                $objectName = '(unknown object)'
+                if ($batch -match '(?i)(?:CREATE|ALTER)\s+(?:PROCEDURE|PROC|TABLE|TYPE|VIEW|FUNCTION)\s+(?:\[?\w+\]?\.)?\[?(\w+)\]?') {
+                    $objectName = $Matches[1]
+                }
+
+                try {
+                    $batchCmd = $trialConn.CreateCommand()
+                    $batchCmd.Transaction = $trialTxn
+                    $batchCmd.CommandText = $batch
+                    $batchCmd.CommandTimeout = 120
+                    $batchCmd.ExecuteNonQuery() | Out-Null
+                }
+                catch {
+                    # Re-throw with the object name embedded using the same 'Procedure X' token
+                    # that the summary parser already recognises, so SCRIPT: lines appear in output.
+                    throw "Procedure $objectName | $($_.Exception.Message)"
+                }
             }
         }
         catch {
@@ -345,11 +359,14 @@ if ($failed.Count -gt 0) {
             if ($part -match "Procedure (\S+)") {
                 Write-Log "  SCRIPT:   $($Matches[1])"
             }
-            if ($part -match "Invalid column name '(\S+)'") {
+            if ($part -match "Invalid column name '([^']+)'") {
                 Write-Log "  ERROR:    Invalid column: $($Matches[1])"
             }
-            if ($part -match "Invalid object name '(\S+)'") {
+            if ($part -match "Invalid object name '([^']+)'") {
                 Write-Log "  ERROR:    Invalid object: $($Matches[1])"
+            }
+            if ($part -match "Cannot find data type ([^.\r\n]+)") {
+                Write-Log "  ERROR:    Missing type: $($Matches[1].Trim())"
             }
         }
         Write-Log "  ---"
