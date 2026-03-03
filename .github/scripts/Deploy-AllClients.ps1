@@ -147,8 +147,11 @@ $results = $clients | ForEach-Object -Parallel {
             }
         }
         foreach ($key in $sqlcmdVars.Keys) {
-            $escaped = [regex]::Escape("\`$($key)")
-            $generatedSql = $generatedSql -replace $escaped, $sqlcmdVars[$key]
+            # Build the literal placeholder $(VarName) and regex-escape it for -replace.
+            # NOTE: do NOT use "`$($key)" — that produces "$VarName" (no parens), which
+            # won't match the $(VarName) syntax sqlpackage writes into the script.
+            $placeholder = [regex]::Escape('$(' + $key + ')')
+            $generatedSql = $generatedSql -replace $placeholder, $sqlcmdVars[$key]
         }
 
         # Strip all remaining sqlcmd directives (lines starting with ':') — not valid T-SQL
