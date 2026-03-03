@@ -9,8 +9,7 @@
     <ProjectGuid>{4532612f-8068-47ca-aca5-ec14006727bd}</ProjectGuid>
     <DSP>Microsoft.Data.Tools.Schema.Sql.Sql150DatabaseSchemaProvider</DSP>
     <OutputType>Database</OutputType>
-    <RootPath>
-    </RootPath>
+    <RootPath />
     <RootNamespace>Database_Project</RootNamespace>
     <AssemblyName>Database_Project</AssemblyName>
     <ModelCollation>1033, CI</ModelCollation>
@@ -49,7 +48,6 @@
   </PropertyGroup>
   <PropertyGroup>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">11.0</VisualStudioVersion>
-    <!-- Default to the v11.0 targets path if the targets file for the current VS version is not found -->
     <SSDTExists Condition="Exists('$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v$(VisualStudioVersion)\SSDT\Microsoft.Data.Tools.Schema.SqlTasks.targets')">True</SSDTExists>
     <VisualStudioVersion Condition="'$(SSDTExists)' == ''">11.0</VisualStudioVersion>
   </PropertyGroup>
@@ -109,5 +107,6 @@
     <Build Include="Types\TYPE_CBS_TellerTransaction_Deno.sql" />
     <Build Include="Types\TYPE_CBS_Voucher.sql" />
     <Build Include="StoredProcedures\USP_CBS_DeploymentTestProcedure.sql" />
+    <Build Include="Tables\ClientDeploymentHistory.sql" />
   </ItemGroup>
 </Project>

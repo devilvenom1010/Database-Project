@@ -98,36 +98,78 @@ $results = $clients | ForEach-Object -Parallel {
     $status = "Success"
     $message = ""
 
+    # --- Phase 1: Pre-flight script generation (no changes applied) ---
     try {
-        $output = & sqlpackage `
-            /Action:Publish `
+        $tempScript = [System.IO.Path]::GetTempFileName() + ".sql"
+
+        $scriptOutput = & sqlpackage `
+            /Action:Script `
             /SourceFile:"$dacpac" `
             /TargetServerName:"$($client.ServerName)" `
             /TargetDatabaseName:"$($client.DatabaseName)" `
             /TargetUser:"$user" `
             /TargetPassword:"$pass" `
             /TargetTrustServerCertificate:True `
+            /OutputPath:"$tempScript" `
             /p:BlockOnPossibleDataLoss=false `
             /p:DropObjectsNotInSource=false `
             /p:TreatVerificationErrorsAsWarnings=true `
-            /p:IncludeTransactionalScripts=True `
             2>&1
 
         if ($LASTEXITCODE -ne 0) {
-            # Extract only meaningful error lines, skip informational output
-            $errorLines = $output | Where-Object {
+            $errorLines = $scriptOutput | Where-Object {
                 $_ -match "Error SQL|Invalid column|Invalid object|Cannot find|Could not|Msg \d+"
             }
-            throw ($errorLines -join " | ")
+            $errText = if ($errorLines) { $errorLines -join " | " } else { $scriptOutput -join " | " }
+            throw "[Pre-flight failed — no changes were applied] $errText"
         }
 
-        $line = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))] SUCCESS: $($client.ClientName) ($($client.DatabaseName))"
+        $line = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))] PRE-FLIGHT OK: $($client.ClientName) ($($client.DatabaseName)) — proceeding with deployment"
         Write-Host $line
         Add-Content -Path $logFile -Value $line
+
+        if (Test-Path $tempScript) { Remove-Item $tempScript -Force }
     }
     catch {
         $status = "Failed"
         $message = $_.Exception.Message
+        $line = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))] PRE-FLIGHT FAILED (skipped deploy): $($client.ClientName) ($($client.DatabaseName)) — $message"
+        Write-Host $line
+        Add-Content -Path $logFile -Value $line
+    }
+
+    # --- Phase 2: Actual deployment (only if pre-flight passed) ---
+    if ($status -eq "Success") {
+        try {
+            $output = & sqlpackage `
+                /Action:Publish `
+                /SourceFile:"$dacpac" `
+                /TargetServerName:"$($client.ServerName)" `
+                /TargetDatabaseName:"$($client.DatabaseName)" `
+                /TargetUser:"$user" `
+                /TargetPassword:"$pass" `
+                /TargetTrustServerCertificate:True `
+                /p:BlockOnPossibleDataLoss=false `
+                /p:DropObjectsNotInSource=false `
+                /p:TreatVerificationErrorsAsWarnings=true `
+                /p:IncludeTransactionalScripts=True `
+                2>&1
+
+            if ($LASTEXITCODE -ne 0) {
+                $errorLines = $output | Where-Object {
+                    $_ -match "Error SQL|Invalid column|Invalid object|Cannot find|Could not|Msg \d+"
+                }
+                throw ($errorLines -join " | ")
+            }
+
+            $line = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))] SUCCESS: $($client.ClientName) ($($client.DatabaseName))"
+            Write-Host $line
+            Add-Content -Path $logFile -Value $line
+        }
+        catch {
+            $status = "Failed"
+            $message = $_.Exception.Message
+        }
     }
 
     # --- Update client SchemaVersion table ---
