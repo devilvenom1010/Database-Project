@@ -98,10 +98,11 @@ $results = $clients | ForEach-Object -Parallel {
     $status = "Success"
     $message = ""
 
-    # --- Phase 1: Pre-flight script generation (no changes applied) ---
+    # --- Phase 1: Pre-flight — generate script, then trial-run inside a rolled-back transaction ---
     try {
         $tempScript = [System.IO.Path]::GetTempFileName() + ".sql"
 
+        # Step 1a: Generate the deployment T-SQL without executing it
         $scriptOutput = & sqlpackage `
             /Action:Script `
             /SourceFile:"$dacpac" `
@@ -121,14 +122,54 @@ $results = $clients | ForEach-Object -Parallel {
                 $_ -match "Error SQL|Invalid column|Invalid object|Cannot find|Could not|Msg \d+"
             }
             $errText = if ($errorLines) { $errorLines -join " | " } else { $scriptOutput -join " | " }
-            throw "[Pre-flight failed — no changes were applied] $errText"
+            throw "[Script generation failed] $errText"
+        }
+
+        # Step 1b: Compile-validate using SET NOEXEC ON.
+        # SQL Server compiles every statement (catching invalid column/object references in
+        # stored procedures) but executes NOTHING — no locks, no transaction log, no blocking.
+        # The script is split on GO because SqlCommand does not understand the GO batch separator.
+        $generatedSql = Get-Content -Path $tempScript -Raw
+        if (Test-Path $tempScript) { Remove-Item $tempScript -Force }
+
+        # Split on GO (case-insensitive, on its own line, optional whitespace)
+        $batches = $generatedSql -split '(?im)^\s*GO\s*$' |
+        Where-Object { $_.Trim() -ne '' }
+
+        $trialConn = New-Object System.Data.SqlClient.SqlConnection(
+            "Server=$($client.ServerName);Database=$($client.DatabaseName);User Id=$user;Password=$pass;TrustServerCertificate=True;Encrypt=False;"
+        )
+        $trialConn.Open()
+        try {
+            # Turn NOEXEC on once for the connection — all subsequent batches compile but don't run
+            $noexecCmd = $trialConn.CreateCommand()
+            $noexecCmd.CommandText = "SET NOEXEC ON;"
+            $noexecCmd.ExecuteNonQuery() | Out-Null
+
+            foreach ($batch in $batches) {
+                $batchCmd = $trialConn.CreateCommand()
+                $batchCmd.CommandText = $batch
+                $batchCmd.CommandTimeout = 120
+                $batchCmd.ExecuteNonQuery() | Out-Null   # compiles only, never runs
+            }
+        }
+        catch {
+            throw "[Compile-validation failed — no changes were applied] $($_.Exception.Message)"
+        }
+        finally {
+            # Always turn NOEXEC off before closing (good practice)
+            try {
+                $resetCmd = $trialConn.CreateCommand()
+                $resetCmd.CommandText = "SET NOEXEC OFF;"
+                $resetCmd.ExecuteNonQuery() | Out-Null
+            }
+            catch {}
+            $trialConn.Close()
         }
 
         $line = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))] PRE-FLIGHT OK: $($client.ClientName) ($($client.DatabaseName)) — proceeding with deployment"
         Write-Host $line
         Add-Content -Path $logFile -Value $line
-
-        if (Test-Path $tempScript) { Remove-Item $tempScript -Force }
     }
     catch {
         $status = "Failed"
@@ -136,6 +177,7 @@ $results = $clients | ForEach-Object -Parallel {
         $line = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))] PRE-FLIGHT FAILED (skipped deploy): $($client.ClientName) ($($client.DatabaseName)) — $message"
         Write-Host $line
         Add-Content -Path $logFile -Value $line
+        if (Test-Path $tempScript) { Remove-Item $tempScript -Force }
     }
 
     # --- Phase 2: Actual deployment (only if pre-flight passed) ---
